@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LGPS Summary Logic Visualizer</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f3f4f6; color: #1f2937; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { color: #111827; margin-bottom: 20px; }
+        
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 10px 20px; border: none; background: #e5e7eb; cursor: pointer; border-radius: 6px; font-weight: 600; color: #4b5563; }
+        .tab-btn.active { background: #176b60; color: white; }
+
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+
+        /* Simulator Styles */
+        .sim-grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+        .controls { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); height: fit-content; }
+        .control-group { margin-bottom: 15px; }
+        .control-label { display: flex; align-items: center; justify-content: space-between; font-weight: 600; cursor: pointer; }
+        .toggle-switch { position: relative; width: 44px; height: 24px; background: #d1d5db; border-radius: 12px; transition: 0.3s; }
+        .toggle-switch::after { content: ''; position: absolute; left: 2px; top: 2px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: 0.3s; }
+        input[type="checkbox"] { display: none; }
+        input[type="checkbox"]:checked + .toggle-switch { background: #176b60; }
+        input[type="checkbox"]:checked + .toggle-switch::after { transform: translateX(20px); }
+
+        .preview-pane { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #e5e7eb; min-height: 500px; position: relative; }
+        
+        /* Debug Trace Panel */
+        .trace-panel { 
+            margin-top: 20px; 
+            padding: 15px; 
+            background: #1f2937; 
+            color: #10b981; 
+            font-family: monospace; 
+            font-size: 0.85rem; 
+            border-radius: 6px; 
+            max-height: 200px; 
+            overflow-y: auto;
+        }
+        .trace-item { margin-bottom: 4px; }
+        .trace-item.active { color: #f59e0b; font-weight: bold; }
+        .trace-item.blocked { color: #6b7280; }
+
+        /* Matching Calculator Styles */
+        .preview-pane h3 { font-size: 1rem; font-weight: 700; color: #183850; margin-top: 1.5rem; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #176b60; padding-bottom: 5px; width: fit-content; }
+        .preview-pane h4 { margin: 16px 0 8px 0; color: #146c78; font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; }
+        .preview-pane p { margin: 0 0 12px 0; color: #374151; line-height: 1.6; }
+        .preview-pane strong { color: #183850; font-weight: 700; }
+        .preview-pane a { color: #176b60; font-weight: bold; text-decoration: none; }
+
+        .ai-highlight-box { background-color: #eafcf9; border: 2px solid #176b60; border-radius: 10px; padding: 20px; color: #183850; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: row; align-items: center; gap: 16px; }
+        .ai-icon { flex-shrink: 0; width: 48px; height: 48px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 2px solid #b2e3df; color: #176b60; }
+        .ai-icon svg { width: 28px; height: 28px; fill: currentColor; }
+        .ai-text { display: flex; flex-direction: column; }
+        .ai-text small { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #4b5563; font-weight: 700; margin-bottom: 4px; }
+        .ai-value { font-size: 1.5rem; font-weight: 800; color: #183850; line-height: 1.1; }
+        .ai-pp-btn { display: inline-flex; align-items: center; justify-content: center; background-color: #176b60; color: #ffffff !important; text-decoration: none !important; padding: 12px 28px; border-radius: 30px; font-weight: 700; font-size: 1rem; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+
+        .block-meta { font-size: 0.75rem; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; display: block; border-top: 1px dashed #e5e7eb; padding-top: 5px; margin-top: 15px; }
+        .priority-badge { background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; display: inline-block; margin-bottom: 5px; margin-right: 5px; }
+
+        /* Matrix Styles */
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th { background: #1f2937; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        .code-snippet { font-family: monospace; background: #f3f4f6; padding: 4px; border-radius: 4px; font-size: 0.9rem; color: #dc2626; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>LGPS Summary Logic Matrix</h1>
+    
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('simulator')">Interactive Simulator</button>
+        <button class="tab-btn" onclick="switchTab('matrix')">Data Matrix</button>
+    </div>
+
+    <!-- Simulator View -->
+    <div id="simulator" class="view-section active">
+        <div class="sim-grid">
+            <div class="controls">
+                <h3>Scenario Inputs</h3>
+                <label class="control-group">
+                    <div class="control-label">
+                        <span>Retire Early? (< NPA)</span>
+                        <input type="checkbox" id="chk-early" onchange="render()">
+                        <div class="toggle-switch"></div>
+                    </div>
+                </label>
+                <label class="control-group">
+                    <div class="control-label">
+                        <span>50/50 Section?</span>
+                        <input type="checkbox" id="chk-fifty" onchange="render()">
+                        <div class="toggle-switch"></div>
+                    </div>
+                </label>
+                <label class="control-group">
+                    <div class="control-label">
+                        <span>Inflation > 0%?</span>
+                        <input type="checkbox" id="chk-inf" onchange="render()">
+                        <div class="toggle-switch"></div>
+                    </div>
+                </label>
+                <label class="control-group">
+                    <div class="control-label">
+                        <span>Promotion Active?</span>
+                        <input type="checkbox" id="chk-promo" onchange="render()">
+                        <div class="toggle-switch"></div>
+                    </div>
+                </label>
+                <label class="control-group">
+                    <div class="control-label">
+                        <span>Stop Age < Ret Age?</span>
+                        <input type="checkbox" id="chk-stop" onchange="render()">
+                        <div class="toggle-switch"></div>
+                    </div>
+                </label>
+                <hr style="border:0; border-top:1px solid #e5e7eb; margin: 15px 0;">
+                
+                <h4>Logic Trace (Debugging)</h4>
+                <p style="font-size:0.85rem; color:#6b7280; margin-bottom:10px;">Why is a message hidden? The logic engine stops at the first match.</p>
+                <div id="trace-log" class="trace-panel">
+                    <!-- Logs go here -->
+                </div>
+            </div>
+
+            <div class="preview-pane" id="output">
+                <!-- Content renders here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Matrix View -->
+    <div id="matrix" class="view-section">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Condition</th>
+                    <th>Exact Text Content (HTML)</th>
+                </tr>
+            </thead>
+            <tbody id="matrix-body">
+                <!-- Rows render here -->
+            </tbody>
+        </table>
+        
+        <h3 style="margin-top: 30px;">"Next Step" Priority Logic</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Priority</th>
+                    <th>Trigger Condition</th>
+                    <th>Mission Text</th>
+                </tr>
+            </thead>
+            <tbody id="priority-body">
+                <!-- Rows render here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    const data = {
+      "blocks": [
+        {
+          "id": "intro",
+          "condition": "Always Shown",
+          "content": "<h3>Your Projection Overview</h3><p>Based on your selections, this model projects a guaranteed annual pension of <strong>{AnnualPension}</strong>. This is paid for life and works out to approximately <strong>{MonthlyPension} per month</strong>.</p>"
+        },
+        {
+          "id": "pot_equivalent",
+          "condition": "Always Shown",
+          "content": "<div class=\"ai-highlight-box\"><div class=\"ai-icon\"><svg viewBox=\"0 0 24 24\"><path d=\"M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,7C13.66,7 15,8.34 15,10C15,11.66 13.66,13 12,13C10.34,13 9,11.66 9,10C9,8.34 10.34,7 12,7M16,17H8V15H16V17Z\" /></svg></div><div class=\"ai-text\"><small>Private Pot Equivalent</small><div class=\"ai-value\">£{PotValue}</div><p style=\"margin: 6px 0 0 0; font-size: 0.9rem; color: #4b5563; line-height: 1.4;\">This is the estimated amount of cash you would need to save up yourself to generate this same annual income for life.</p></div></div>"
+        },
+        {
+          "id": "inflation_positive",
+          "condition": "Inflation > 0",
+          "content": "<p style=\"font-size:0.95rem; color:#4b5563; background:#fffbeb; border:1px solid #f59e0b; padding:10px; border-radius:6px;\"><strong>Inflation Adjusted:</strong> You have modeled a <strong>{CPI}%</strong> annual inflation rate. This ensures your projected pension grows to maintain its buying power relative to the rising cost of living.</p>"
+        },
+        {
+          "id": "early_retirement",
+          "condition": "Early Retirement (< NPA)",
+          "content": "<h4>Impact of retiring early</h4><p>By choosing to take your pension at age {RetAge} (which is before your scheme retirement age of {NPA}), the figures have been adjusted to reflect that your pension will be paid for longer. In this model, your LGPS pension provides a guaranteed foundation of {MonthlyPension} per month during the \"bridge years\" before your State Pension begins. <a href=\"#\">Read more about Early Retirement</a></p>"
+        },
+        {
+          "id": "zero_inflation",
+          "condition": "Inflation == 0",
+          "content": "<h4>Purchasing Power</h4><p>You are currently viewing figures in \"Today's Money\" (0% future growth). This is helpful for understanding value relative to current prices, but remember that the LGPS CARE scheme includes built-in inflation protection to help your income keep up with the cost of living.</p>"
+        },
+        {
+          "id": "fifty_fifty",
+          "condition": "50/50 Selected",
+          "content": "<h4>50/50 Selection</h4><p>Your summary includes the 50/50 option. While this reduces your monthly cost by half, it also reduces the amount of pension you bank for your future. In this model, switching back to the Main Scheme would increase your projected annual income by <strong>{LossAmount}</strong>. <a href=\"#\">Read about the 50/50 option</a></p><div style=\"margin-top:15px; padding:15px; background:#f9fafb; border-radius:8px; border:1px solid #e5e7eb;\"><div style=\"margin-bottom:8px; font-weight:700; font-size:0.9rem; color:#4b5563;\">Main Scheme Projection</div><div style=\"display:flex; align-items:center; margin-bottom:12px;\"><div style=\"height:12px; border-radius:6px; background:#176b60; width:100%;\"></div><div style=\"margin-left:10px; font-weight:800; font-size:0.9rem; color:#176b60;\">{FullPension}</div></div><div style=\"margin-bottom:8px; font-weight:700; font-size:0.9rem; color:#4b5563;\">50/50 Scheme Projection</div><div style=\"display:flex; align-items:center;\"><div style=\"height:12px; border-radius:6px; background:#183850; width:50%;\"></div><div style=\"margin-left:10px; font-weight:800; font-size:0.9rem; color:#183850;\">{5050Pension}</div></div></div>"
+        },
+        {
+          "id": "next_step_box",
+          "condition": "Based on Highest Priority",
+          "content": "<div style=\"background: #eefbfd; border: 1px solid #1C8E9D; padding: 15px; border-radius: 8px; margin-top: 20px;\"><h4 style=\"margin-top:0 !important; color:#183850 !important;\">Suggested Next Step</h4><p style=\"margin-bottom:0;\">{MissionText}</p></div>"
+        },
+        {
+          "id": "footer",
+          "condition": "Always Shown",
+          "content": "<div style=\"margin-top: 20px; padding: 12px; background-color: #fff1f2; border-left: 4px solid #CB5364; border-radius: 4px; font-size: 1rem; color: #910039;\"><strong>Educational Purposes Only:</strong> This summary is based on your inputs. It is an estimation tool and <strong>must not</strong> be used as financial advice.</div><div style=\"margin-top: 16px; text-align: center;\"><a href=\"#\" class=\"ai-pp-btn\">Register or Log in to PensionPoint</a></div>"
+        }
+      ],
+      "priorities": [
+        { "rank": 1, "trigger": "Retirement Age < NPA", "text": "Try changing your retirement age to your full pension age ({NPA}) to see exactly how much guaranteed income you 'buy back' by waiting." },
+        { "rank": 2, "trigger": "50/50 Selected", "text": "Switch back to the Main Scheme model to see the long-term difference between banking half versus full benefits for your future." },
+        { "rank": 3, "trigger": "Inflation == 0%", "text": "Try moving the inflation slider to 2.5% to see how annual cost-of-living adjustments help your pension keep up with the rising price of everyday items like bread." },
+        { "rank": 4, "trigger": "Promo Toggle Off", "text": "Use the promotion toggle to see how a salary increase mid-career can significantly boost the annual income you bank for life." },
+        { "rank": 5, "trigger": "Stop Age < Retirement Age", "text": "Try setting the 'Stop Contributing' age to 55 but keep your retirement age at 67. This shows how your pension stays protected and grows even if you stop working years before you actually take the money." }
+      ]
+    };
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    function renderMatrix() {
+        const tbody = document.getElementById('matrix-body');
+        data.blocks.forEach(block => {
+            const tr = document.createElement('tr');
+            let displayContent = block.content
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;"); // Escape HTML for display in matrix
+            tr.innerHTML = `<td><span class="code-snippet">${block.id}</span></td><td>${block.condition}</td><td><pre style="white-space: pre-wrap; font-size: 0.85rem;">${displayContent}</pre></td>`;
+            tbody.appendChild(tr);
+        });
+
+        const pbody = document.getElementById('priority-body');
+        data.priorities.forEach(p => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${p.rank}</td><td>${p.trigger}</td><td>${p.text}</td>`;
+            pbody.appendChild(tr);
+        });
+    }
+
+    function render() {
+        const isEarly = document.getElementById('chk-early').checked;
+        const isFifty = document.getElementById('chk-fifty').checked;
+        const isInf = document.getElementById('chk-inf').checked;
+        const hasPromo = document.getElementById('chk-promo').checked;
+        const stopEarly = document.getElementById('chk-stop').checked;
+
+        const container = document.getElementById('output');
+        const traceLog = document.getElementById('trace-log');
+        
+        container.innerHTML = '';
+        traceLog.innerHTML = '';
+
+        const createBlock = (block, extraClass='', replacements={}) => {
+            const div = document.createElement('div');
+            div.className = 'block ' + extraClass;
+            let content = block.content;
+            for (const [key, value] of Object.entries(replacements)) {
+                content = content.replace(key, value);
+            }
+            div.innerHTML = content + `<span class="block-meta">Logic ID: ${block.id}</span>`;
+            return div;
+        };
+
+        const addTrace = (msg, type) => {
+            const div = document.createElement('div');
+            div.className = `trace-item ${type}`;
+            div.innerText = msg;
+            traceLog.appendChild(div);
+        }
+
+        // Standard Placeholders for Simulation
+        const placeholders = {
+            "{AnnualPension}": "£15,000",
+            "{MonthlyPension}": "£1,250",
+            "{PotValue}": "300,000",
+            "{CPI}": "2.5",
+            "{RetAge}": "60",
+            "{NPA}": "67",
+            "{LossAmount}": "£7,500",
+            "{FullPension}": "£15,000",
+            "{5050Pension}": "£7,500"
+        };
+
+        // 1. Intro (Always)
+        container.appendChild(createBlock(data.blocks[0], '', placeholders));
+
+        // 2. Pot (Always)
+        container.appendChild(createBlock(data.blocks[1], '', placeholders));
+
+        // 3. Inflation Positive (Condition: Inflation > 0)
+        if (isInf) {
+            container.appendChild(createBlock(data.blocks[2], '', placeholders));
+        }
+
+        // 4. Early Ret (Condition: Early)
+        if (isEarly) {
+            container.appendChild(createBlock(data.blocks[3], '', placeholders));
+        }
+
+        // 5. Zero Inflation (Condition: Not Inflation)
+        if (!isInf) {
+            container.appendChild(createBlock(data.blocks[4], '', placeholders));
+        }
+
+        // 6. Fifty Fifty (Condition: 50/50)
+        if (isFifty) {
+            container.appendChild(createBlock(data.blocks[5], '', placeholders));
+        }
+
+        // 7. Logic Engine (Next Step)
+        let missionText = "";
+        let priorityRank = 0;
+        let matched = false;
+
+        addTrace("--- Starting Logic Check ---", "");
+
+        // Priority 1: Early Retirement
+        if (!matched && isEarly) {
+            missionText = data.priorities[0].text;
+            priorityRank = 1;
+            matched = true;
+            addTrace("[Rank 1] Early Retirement matched! Stopping.", "active");
+        } else {
+            addTrace("[Rank 1] Early Retirement check failed.", "blocked");
+        }
+
+        // Priority 2: 50/50
+        if (!matched && isFifty) {
+            missionText = data.priorities[1].text;
+            priorityRank = 2;
+            matched = true;
+            addTrace("[Rank 2] 50/50 matched! Stopping.", "active");
+        } else {
+            if (!matched) addTrace("[Rank 2] 50/50 check failed.", "blocked");
+        }
+
+        // Priority 3: Inflation 0% (!isInf)
+        if (!matched && !isInf) {
+            missionText = data.priorities[2].text;
+            priorityRank = 3;
+            matched = true;
+            addTrace("[Rank 3] Inflation 0% matched! Stopping.", "active");
+        } else {
+            if (!matched) addTrace("[Rank 3] Inflation check failed (Inflation is > 0).", "blocked");
+        }
+
+        // Priority 4: Promo Toggle Off (!hasPromo)
+        if (!matched && !hasPromo) {
+            missionText = data.priorities[3].text;
+            priorityRank = 4;
+            matched = true;
+            addTrace("[Rank 4] Promo inactive matched! Stopping.", "active");
+        } else {
+            if (!matched) addTrace("[Rank 4] Promo check failed (Promo is Active).", "blocked");
+        }
+
+        // Priority 5: Stop Age < Ret Age
+        if (!matched && stopEarly) {
+            missionText = data.priorities[4].text;
+            priorityRank = 5;
+            matched = true;
+            addTrace("[Rank 5] Stop Age matched! Stopping.", "active");
+        } else {
+            if (!matched) addTrace("[Rank 5] Stop Age check failed.", "blocked");
+        }
+
+        if (missionText) {
+            // Apply placeholders to mission text as well (e.g. {NPA})
+            for (const [key, value] of Object.entries(placeholders)) {
+                missionText = missionText.replace(key, value);
+            }
+            
+            const missionBlock = JSON.parse(JSON.stringify(data.blocks[6])); // Clone
+            const div = createBlock(missionBlock, '', { "{MissionText}": missionText });
+            div.insertAdjacentHTML('afterbegin', `<div class="priority-badge">Priority Rank: ${priorityRank}</div>`);
+            container.appendChild(div);
+        } else {
+            addTrace("No matches found. Next Step box hidden.", "blocked");
+        }
+
+        // 8. Footer (Always)
+        container.appendChild(createBlock(data.blocks[7]));
+    }
+
+    // Init
+    renderMatrix();
+    render();
+</script>
+
+</body>
+</html>
